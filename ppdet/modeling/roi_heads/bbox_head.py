@@ -157,6 +157,44 @@ class TwoFCHead(object):
 
 
 @register
+class MultiFCHead(object):
+    """
+    RCNN head with multiple Fully Connected layers
+
+    Args:
+        mlp_dim (int): num of filters for the fc layers
+    """
+
+    def __init__(self, mlp_dim=1024, num_fc=2):
+        super(MultiFCHead, self).__init__()
+        self.mlp_dim = mlp_dim
+        self.num_fc = num_fc
+
+    def __call__(self, roi_feat):
+        mixed_precision_enabled = mixed_precision_global_state() is not None
+
+        if mixed_precision_enabled:
+            roi_feat = fluid.layers.cast(roi_feat, 'float16')
+
+        feat = roi_feat
+        for idx in range(self.num_fc):
+            fc_name = 'fc{}'.format(idx + 6)
+            feat = fluid.layers.fc(input=feat,
+                                   size=self.mlp_dim,
+                                   act='relu',
+                                   name=fc_name,
+                                   param_attr=ParamAttr(name=fc_name + "_w"),
+                                   bias_attr=ParamAttr(
+                                       name=fc_name + "_b",
+                                       learning_rate=2.,
+                                       regularizer=L2Decay(0.)))
+
+        if mixed_precision_enabled:
+            feat = fluid.layers.cast(feat, 'float32')
+        return feat
+
+
+@register
 class BBoxHead(object):
     """
     RCNN bbox head
@@ -217,8 +255,7 @@ class BBoxHead(object):
         """
         head_feat = self.get_head_feat(roi_feat)
         # when ResNetC5 output a single feature map
-        if not isinstance(self.head, TwoFCHead) and not isinstance(
-                self.head, XConvNormHead):
+        if not isinstance(self.head, (TwoFCHead, XConvNormHead, MultiFCHead)):
             head_feat = fluid.layers.pool2d(
                 head_feat, pool_type='avg', global_pooling=True)
         cls_score = fluid.layers.fc(input=head_feat,

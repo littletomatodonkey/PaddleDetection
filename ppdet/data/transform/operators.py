@@ -436,6 +436,83 @@ class RandomFlipImage(BaseOperator):
 
 
 @register_op
+class AutoAugmentImage(BaseOperator):
+    def __init__(self, is_normalized=False, autoaug_type="v1"):
+        """
+        Args:
+            is_normalized (bool): whether the bbox scale to [0,1]
+            autoaug_type (str): autoaug type, support v0, v1, v2, v3, test
+        """
+        super(AutoAugmentImage, self).__init__()
+        self.is_normalized = is_normalized
+        self.autoaug_type = autoaug_type
+        if not isinstance(self.is_normalized, bool):
+            raise TypeError("{}: input type is invalid.".format(self))
+
+    def __call__(self, sample, context=None):
+        """Filp the image and bounding box.
+        Operators:
+            1. Flip the image numpy.
+            2. Transform the bboxes' x coordinates.
+              (Must judge whether the coordinates are normalized!)
+            3. Transform the segmentations' x coordinates.
+              (Must judge whether the coordinates are normalized!)
+        Output:
+            sample: the image, bounding box and segmentation part
+                    in sample are flipped.
+        """
+        samples = sample
+        batch_input = True
+        if not isinstance(samples, Sequence):
+            batch_input = False
+            samples = [samples]
+        for sample in samples:
+            gt_bbox = sample['gt_bbox']
+            im = sample['image']
+            if not isinstance(im, np.ndarray):
+                raise TypeError("{}: image is not a numpy array.".format(self))
+            if len(im.shape) != 3:
+                raise ImageError("{}: image is not 3-dimensional.".format(self))
+            if len(gt_bbox) == 0:
+                continue
+
+            # gt_boxes : [x1, y1, x2, y2]
+            # norm_gt_boxes: [y1, x1, y2, x2]
+            height, width, _ = im.shape
+            norm_gt_bbox = np.ones_like(gt_bbox, dtype=np.float32)
+            if not self.is_normalized:
+                norm_gt_bbox[:, 0] = gt_bbox[:, 1] / float(height)
+                norm_gt_bbox[:, 1] = gt_bbox[:, 0] / float(width)
+                norm_gt_bbox[:, 2] = gt_bbox[:, 3] / float(height)
+                norm_gt_bbox[:, 3] = gt_bbox[:, 2] / float(width)
+            else:
+                norm_gt_bbox[:, 0] = gt_bbox[:, 1]
+                norm_gt_bbox[:, 1] = gt_bbox[:, 0]
+                norm_gt_bbox[:, 2] = gt_bbox[:, 3]
+                norm_gt_bbox[:, 3] = gt_bbox[:, 2]
+
+            from .autoaugment_utils import distort_image_with_autoaugment
+            im, norm_gt_bbox = distort_image_with_autoaugment(im, norm_gt_bbox,
+                                                              self.autoaug_type)
+            if not self.is_normalized:
+                gt_bbox[:, 0] = norm_gt_bbox[:, 1] * float(width)
+                gt_bbox[:, 1] = norm_gt_bbox[:, 0] * float(height)
+                gt_bbox[:, 2] = norm_gt_bbox[:, 3] * float(width)
+                gt_bbox[:, 3] = norm_gt_bbox[:, 2] * float(height)
+            else:
+                gt_bbox[:, 0] = norm_gt_bbox[:, 1]
+                gt_bbox[:, 1] = norm_gt_bbox[:, 0]
+                gt_bbox[:, 2] = norm_gt_bbox[:, 3]
+                gt_bbox[:, 3] = norm_gt_bbox[:, 2]
+
+            sample['gt_bbox'] = gt_bbox
+            sample['image'] = im
+
+        sample = samples if batch_input else samples[0]
+        return sample
+
+
+@register_op
 class NormalizeImage(BaseOperator):
     def __init__(self,
                  mean=[0.485, 0.456, 0.406],
@@ -946,6 +1023,55 @@ class Permute(BaseOperator):
                     if self.to_bgr:
                         im = im[[2, 1, 0], :, :]
                     sample[k] = im
+        if not batch_input:
+            samples = samples[0]
+        return samples
+
+
+@register_op
+class GridmaskOp(BaseOperator):
+    def __init__(self,
+                 use_h,
+                 use_w,
+                 rotate=1,
+                 offset=False,
+                 ratio=0.5,
+                 mode=1,
+                 prob=0.7):
+        """
+        Change the channel.
+        Args:
+            to_bgr (bool): confirm whether to convert RGB to BGR
+            channel_first (bool): confirm whether to change channel
+
+        """
+        super(GridmaskOp, self).__init__()
+        self.use_h = use_h
+        self.use_w = use_w
+        self.rotate = rotate
+        self.offset = offset
+        self.ratio = ratio
+        self.mode = mode
+        self.prob = prob
+
+        from .gridmask_utils import GridMask
+        self.gridmask_op = GridMask(
+            use_h,
+            use_w,
+            rotate=rotate,
+            offset=offset,
+            ratio=ratio,
+            mode=mode,
+            prob=prob)
+
+    def __call__(self, sample, context=None):
+        samples = sample
+        batch_input = True
+        if not isinstance(samples, Sequence):
+            batch_input = False
+            samples = [samples]
+        for sample in samples:
+            sample['image'] = self.gridmask_op(sample['image'])
         if not batch_input:
             samples = samples[0]
         return samples
