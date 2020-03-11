@@ -1029,7 +1029,7 @@ class Permute(BaseOperator):
 
 
 @register_op
-class GridmaskOp(BaseOperator):
+class GridMaskOp(BaseOperator):
     def __init__(self,
                  use_h,
                  use_w,
@@ -1045,7 +1045,7 @@ class GridmaskOp(BaseOperator):
             channel_first (bool): confirm whether to change channel
 
         """
-        super(GridmaskOp, self).__init__()
+        super(GridMaskOp, self).__init__()
         self.use_h = use_h
         self.use_w = use_w
         self.rotate = rotate
