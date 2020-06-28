@@ -1,9 +1,6 @@
 import numpy as np
 from PIL import Image
 
-CURR_ITER = 0
-MAX_ITER = 1
-
 
 class GridMask(object):
     def __init__(self,
@@ -13,7 +10,8 @@ class GridMask(object):
                  offset=False,
                  ratio=0.5,
                  mode=1,
-                 prob=0.7):
+                 prob=0.7,
+                 upper_iter=60000):
         super(GridMask, self).__init__()
         self.use_h = use_h
         self.use_w = use_w
@@ -23,19 +21,10 @@ class GridMask(object):
         self.mode = mode
         self.prob = prob
         self.st_prob = prob
+        self.upper_iter = upper_iter
 
-    def _set_prob(self):
-        global CURR_ITER
-        global MAX_ITER
-        self.prob = self.st_prob * min(1, 1.0 * CURR_ITER / MAX_ITER)
-        return
-
-    def __call__(self, x):
-        self._set_prob()
-        global CURR_ITER
-        global MAX_ITER
-        print("curr_iter: {}, max_iter: {}, prob: {}".format(
-            CURR_ITER, MAX_ITER, self.prob))
+    def __call__(self, x, curr_iter):
+        self.prob = self.st_prob * min(1, 1.0 * curr_iter / self.upper_iter)
         if np.random.rand() > self.prob:
             return x
         _, h, w = x.shape

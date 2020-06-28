@@ -1037,7 +1037,8 @@ class GridMaskOp(BaseOperator):
                  offset=False,
                  ratio=0.5,
                  mode=1,
-                 prob=0.7):
+                 prob=0.7,
+                 upper_iter=60000):
         """
         Change the channel.
         Args:
@@ -1053,6 +1054,7 @@ class GridMaskOp(BaseOperator):
         self.ratio = ratio
         self.mode = mode
         self.prob = prob
+        self.upper_iter = upper_iter
 
         from .gridmask_utils import GridMask
         self.gridmask_op = GridMask(
@@ -1062,7 +1064,8 @@ class GridMaskOp(BaseOperator):
             offset=offset,
             ratio=ratio,
             mode=mode,
-            prob=prob)
+            prob=prob,
+            upper_iter=upper_iter)
 
     def __call__(self, sample, context=None):
         samples = sample
@@ -1071,7 +1074,8 @@ class GridMaskOp(BaseOperator):
             batch_input = False
             samples = [samples]
         for sample in samples:
-            sample['image'] = self.gridmask_op(sample['image'])
+            sample['image'] = self.gridmask_op(sample['image'],
+                                               sample['curr_iter'])
         if not batch_input:
             samples = samples[0]
         return samples

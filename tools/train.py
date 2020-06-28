@@ -49,21 +49,10 @@ from ppdet.utils.cli import ArgsParser
 from ppdet.utils.check import check_gpu, check_version
 import ppdet.utils.checkpoint as checkpoint
 
-from ppdet.data.transform.operators import GridMaskOp
-from ppdet.data.transform import gridmask_utils
-from ppdet.data.transform.gridmask_utils import GridMask
-
 import logging
 FORMAT = '%(asctime)s-%(levelname)s: %(message)s'
 logging.basicConfig(level=logging.INFO, format=FORMAT)
 logger = logging.getLogger(__name__)
-
-
-def check_gridmask(cfg):
-    for transform in cfg["TrainReader"]["sample_transforms"]:
-        if isinstance(transform, GridMaskOp):
-            return True
-    return False
 
 
 def main():
@@ -83,9 +72,6 @@ def main():
         raise ValueError("'architecture' not specified in config file.")
 
     merge_config(FLAGS.opt)
-
-    use_gridmask = check_gridmask(cfg)
-    print("[gridmask is set as ]: ", use_gridmask)
 
     if 'log_iter' not in cfg:
         cfg.log_iter = 20
@@ -238,12 +224,6 @@ def main():
         tb_mAP_step = 0
 
     for it in range(start_iter, cfg.max_iters):
-
-        if use_gridmask:
-            print("[in train.py]it: ", it)
-            gridmask_utils.CURR_ITER = it
-            gridmask_utils.MAX_ITER = cfg.max_iters
-
         start_time = end_time
         end_time = time.time()
         time_stat.append(end_time - start_time)
